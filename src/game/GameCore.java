@@ -101,55 +101,137 @@ class GameState {
  }
 
  // === MOVE EXECUTION & PENALTIES ===
+// public boolean makeMove(int row, int col, int value, boolean isHuman) {
+//     if (grid[row][col] != 0) {
+//         statusMessage = "❌ Cell already filled!";
+//         return false;
+//     }
+//
+//     if (graph.hasConflict(grid, row, col, value)) {
+//         applyPenalty(isHuman, 10, "Constraint violation");
+//         return false;
+//     }
+//
+//     grid[row][col] = value;
+//     int scoreGain = 1;
+//
+//     boolean rowComplete = isRowComplete(row);
+//     boolean colComplete = isColumnComplete(col);
+//
+//     if (rowComplete) {
+//         scoreGain += 10;
+//         if (validateRowVisibility(row)) scoreGain += 15;
+//         else applyPenalty(isHuman, 15, "Row visibility violation");
+//     }
+//     if (colComplete) {
+//         scoreGain += 10;
+//         if (validateColumnVisibility(col)) scoreGain += 15;
+//         else applyPenalty(isHuman, 15, "Column visibility violation");
+//     }
+//
+//     if (isHuman) humanScore += scoreGain;
+//     else cpuScore += scoreGain;
+//
+//     if (!hasAnyValidMoves()) {
+//         applyPenalty(isHuman, 5, "Deadlock - no legal moves");
+//     }
+//
+//     statusMessage = isHuman ? "✓ Valid move! +" + scoreGain : "✓ CPU move! +" + scoreGain;
+//     return true;
+// }
+ 
+ 
+ 
  public boolean makeMove(int row, int col, int value, boolean isHuman) {
-     if (grid[row][col] != 0) {
-         statusMessage = "❌ Cell already filled!";
-         return false;
-     }
+	    // 1. Check if cell is occupied
+	    if (grid[row][col] != 0) {
+	        statusMessage = "❌ Cell already filled!";
+	        return false;
+	    }
 
-     if (graph.hasConflict(grid, row, col, value)) {
-         applyPenalty(isHuman, 10, "Constraint violation");
-         return false;
-     }
+	    // 2. Check for constraint violations (duplicates in row/column)
+	    if (graph.hasConflict(grid, row, col, value)) {
+	        applyPenalty(isHuman, 10, "Constraint violation");
+	        return false;  // Move REJECTED - number NOT placed
+	    }
 
-     grid[row][col] = value;
-     int scoreGain = 1;
+	    // 3. Place the move (passed constraint checks)
+	    grid[row][col] = value;
+	    int scoreGain = 0;
+	    boolean hadViolation = false;
 
-     boolean rowComplete = isRowComplete(row);
-     boolean colComplete = isColumnComplete(col);
+	    // 4. Check if row is now complete
+	    boolean rowComplete = isRowComplete(row);
+	    if (rowComplete) {
+	        if (validateRowVisibility(row)) {
+	            scoreGain += 15;  // Valid row completion bonus
+	        } else {
+	            applyPenalty(isHuman, 15, "Row visibility violation");
+	            hadViolation = true;
+	        }
+	    }
 
-     if (rowComplete) {
-         scoreGain += 10;
-         if (validateRowVisibility(row)) scoreGain += 15;
-         else applyPenalty(isHuman, 15, "Row visibility violation");
-     }
-     if (colComplete) {
-         scoreGain += 10;
-         if (validateColumnVisibility(col)) scoreGain += 15;
-         else applyPenalty(isHuman, 15, "Column visibility violation");
-     }
+	    // 5. Check if column is now complete
+	    boolean colComplete = isColumnComplete(col);
+	    if (colComplete) {
+	        if (validateColumnVisibility(col)) {
+	            scoreGain += 15;  // Valid column completion bonus
+	        } else {
+	            applyPenalty(isHuman, 15, "Column visibility violation");
+	            hadViolation = true;
+	        }
+	    }
 
-     if (isHuman) humanScore += scoreGain;
-     else cpuScore += scoreGain;
+	    // 6. Partial move points (if nothing completed)
+	    if (!rowComplete && !colComplete) {
+	        scoreGain = 1;
+	    }
 
+	    // 7. Award points
+	    if (isHuman) humanScore += scoreGain;
+	    else cpuScore += scoreGain;
+
+	    // 8. Set status message
+	    if (hadViolation) {
+	        statusMessage = isHuman ? "⚠️ Move placed but violated clues! -15 lives" : "⚠️ CPU violated clues! -15 lives";
+	    } else {
+	        statusMessage = isHuman ? "✓ Valid move! +" + scoreGain + " points" : "✓ CPU scored +" + scoreGain + " points";
+	    }
+
+	    return true;
+	}
+ 
+ /**
+  * Check if the current player has any legal moves available.
+  * If not, apply deadlock penalty and return true.
+  * Call this BEFORE each player's turn in the GUI.
+  */
+ public boolean checkForDeadlock(boolean isHuman) {
      if (!hasAnyValidMoves()) {
          applyPenalty(isHuman, 5, "Deadlock - no legal moves");
+         return true;  // Deadlock detected - skip turn
      }
-
-     statusMessage = isHuman ? "✓ Valid move! +" + scoreGain : "✓ CPU move! +" + scoreGain;
-     return true;
+     return false;  // Has legal moves - continue normally
  }
 
+// private void applyPenalty(boolean isHuman, int amount, String reason) {
+//     if (isHuman) {
+//         humanLives = Math.max(0, humanLives - amount);
+//         statusMessage = "❌ " + reason + " (-" + amount + " lives)";
+//     } else {
+//         cpuLives = Math.max(0, cpuLives - amount);
+//         statusMessage = "❌ CPU " + reason.toLowerCase() + " (-" + amount + " lives)";
+//     }
+// }
  private void applyPenalty(boolean isHuman, int amount, String reason) {
-     if (isHuman) {
-         humanLives = Math.max(0, humanLives - amount);
-         statusMessage = "❌ " + reason + " (-" + amount + " lives)";
-     } else {
-         cpuLives = Math.max(0, cpuLives - amount);
-         statusMessage = "❌ CPU " + reason.toLowerCase() + " (-" + amount + " lives)";
-     }
- }
-
+	    if (isHuman) {
+	        humanLives = Math.max(0, humanLives - amount);
+	        statusMessage = "❌ " + reason + " (-" + amount + " lives) → Lives: " + humanLives;
+	    } else {
+	        cpuLives = Math.max(0, cpuLives - amount);
+	        statusMessage = "❌ CPU " + reason.toLowerCase() + " (-" + amount + " lives) → Lives: " + cpuLives;
+	    }
+	}
  // === VISIBILITY & HELPERS ===
  public boolean validateRowVisibility(int row) {
      int leftCount = countVisible(grid[row], true);
@@ -219,23 +301,87 @@ class GameState {
      return false;
  }
 
+// public String getWinner() {
+//     if (humanLives <= 0 && cpuLives <= 0) return "DRAW - Double KO";
+//     if (humanLives <= 0) return "CPU WINS";
+//     if (cpuLives <= 0) return "HUMAN WINS";
+//     if (isBoardFull() || !hasAnyValidMoves()) {
+//         int hTotal = humanScore + humanLives / 10;
+//         int cTotal = cpuScore + cpuLives / 10;
+//         if (hTotal > cTotal) return "HUMAN WINS";
+//         if (cTotal > hTotal) return "CPU WINS";
+//         return "DRAW";
+//     }
+//     return null;
+// }
+ 
+ /**
+  * Check if a specific player has valid moves
+  * Returns true if player CAN move, false if stuck
+  */
+ public boolean hasValidMovesForPlayer(boolean isHuman) {
+     // If it's not their turn, they're not stuck
+     if (isHuman && !isHumanTurn) return true;
+     if (!isHuman && isHumanTurn) return true;
+     
+     // Check if ANY legal move exists
+     return hasAnyValidMoves();
+ }
+ 
+ 
  public String getWinner() {
-     if (humanLives <= 0 && cpuLives <= 0) return "DRAW - Double KO";
-     if (humanLives <= 0) return "CPU WINS";
-     if (cpuLives <= 0) return "HUMAN WINS";
-     if (isBoardFull() || !hasAnyValidMoves()) {
-         int hTotal = humanScore + humanLives / 10;
-         int cTotal = cpuScore + cpuLives / 10;
-         if (hTotal > cTotal) return "HUMAN WINS";
-         if (cTotal > hTotal) return "CPU WINS";
-         return "DRAW";
-     }
-     return null;
- }
+	    // 1. IMMEDIATE LOSS (Lives = 0)
+	    if (humanLives <= 0 && cpuLives <= 0) {
+	        return "DRAW - Double KO!";
+	    }
+	    if (humanLives <= 0) {
+	        return "CPU WINS - Human out of lives!";
+	    }
+	    if (cpuLives <= 0) {
+	        return "HUMAN WINS - CPU out of lives!";
+	    }
+	    
+	    // 2. BOARD FULL or DEADLOCK
+	    if (isBoardFull() || !hasAnyValidMoves()) {
+	        // Calculate total score: score + (lives / 10)
+	        int humanTotal = humanScore + (humanLives / 10);
+	        int cpuTotal = cpuScore + (cpuLives / 10);
+	        
+	        if (humanTotal > cpuTotal) {
+	            return String.format("HUMAN WINS - Total: %d vs %d", humanTotal, cpuTotal);
+	        } else if (cpuTotal > humanTotal) {
+	            return String.format("CPU WINS - Total: %d vs %d", cpuTotal, humanTotal);
+	        } else {
+	            return String.format("DRAW - Equal Totals: %d", humanTotal);
+	        }
+	    }
+	    
+	    return null;  // Game still ongoing
+	}
 
+// public boolean isGameOver() {
+//     return humanLives <= 0 || cpuLives <= 0 || isBoardFull() || !hasAnyValidMoves();
+// }
+ 
+ 
  public boolean isGameOver() {
-     return humanLives <= 0 || cpuLives <= 0 || isBoardFull() || !hasAnyValidMoves();
- }
+	    // Immediate loss by lives
+	    if (humanLives <= 0 || cpuLives <= 0) {
+	        return true;
+	    }
+	    
+	    // Board completely filled
+	    if (isBoardFull()) {
+	        return true;
+	    }
+	    
+	    // Mutual deadlock - no one can move
+	    if (!hasAnyValidMoves()) {
+	        return true;
+	    }
+	    
+	    return false;
+	}
 
  // === GETTERS ===
  public int[][] getGrid() { return grid; }

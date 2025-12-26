@@ -11,10 +11,10 @@ import java.awt.event.*;
 
 public class TowersGameGUI extends JFrame {
     private static final int N = 4;
-    private static final int[] TOP    = {2, 3, 1, 2};
-    private static final int[] RIGHT  = {1, 3, 2, 2};
-    private static final int[] BOTTOM = {3, 1, 2, 2};
-    private static final int[] LEFT   = {2, 2, 3, 1};
+    private static final int[] TOP    = {2, 1, 4, 2};
+    private static final int[] RIGHT  = {2, 1, 3, 2};
+    private static final int[] BOTTOM = {2,3,1,3};
+    private static final int[] LEFT   = {2, 3, 1, 2};
 
     private GameState gameState;
     private StrategyLives strategyLives;
@@ -304,32 +304,126 @@ public class TowersGameGUI extends JFrame {
     private void showValueSelection() {
         for (int i = 0; i < N; i++) {
             int val = i + 1;
-            boolean legal = !gameState.getGraph().hasConflict(gameState.getGrid(), selectedRow, selectedCol, val);
-            valueButtons[i].setEnabled(legal);
-            valueButtons[i].setBackground(legal ? new Color(79, 70, 229) : Color.GRAY);
+            //boolean legal = !gameState.getGraph().hasConflict(gameState.getGrid(), selectedRow, selectedCol, val);
+            valueButtons[i].setEnabled(true);
+            valueButtons[i].setBackground(new Color(79, 70, 229));
         }
         valueSelectionPanel.setVisible(true);
         statusLabel.setText("Choose a value for cell (" + (selectedRow+1) + "," + (selectedCol+1) + ")");
     }
 
+//    private void handleValueClick(int val) {
+//        if (selectedRow == -1) return;
+//
+//        gameState.makeMove(selectedRow, selectedCol, val, true);
+//        selectedRow = -1;
+//        selectedCol = -1;
+//        valueSelectionPanel.setVisible(false);
+//        gameState.setHumanTurn(false);
+//        updateDisplay();
+//
+//        if (checkGameEnd()) return;
+//
+//        Timer delay = new Timer(600, e -> {
+//            updateHeatMap();
+//            animateHeatMap(0);
+//        });
+//        delay.setRepeats(false);
+//        delay.start();
+//    }
+    
+    
+//    private void handleValueClick(int val) {
+//        if (selectedRow == -1) return;
+//
+//        // ⭐ ADD THIS: Check for deadlock BEFORE allowing move
+//        if (gameState.checkForDeadlock(true)) {
+//            statusLabel.setText("You have no legal moves! -5 lives, skipping turn");
+//            selectedRow = -1;
+//            selectedCol = -1;
+//            valueSelectionPanel.setVisible(false);
+//            gameState.setHumanTurn(false);
+//            updateDisplay();
+//            
+//            Timer delay = new Timer(1500, e -> {
+//                if (!checkGameEnd()) {
+//                    updateHeatMap();
+//                    animateHeatMap(0);
+//                }
+//            });
+//            delay.setRepeats(false);
+//            delay.start();
+//            return;
+//        }
+//
+//        // Rest of existing code...
+//        gameState.makeMove(selectedRow, selectedCol, val, true);
+//        selectedRow = -1;
+//        selectedCol = -1;
+//        valueSelectionPanel.setVisible(false);
+//        gameState.setHumanTurn(false);
+//        updateDisplay();
+//
+//        if (checkGameEnd()) return;
+//
+//        Timer delay = new Timer(600, e -> {
+//            updateHeatMap();
+//            animateHeatMap(0);
+//        });
+//        delay.setRepeats(false);
+//        delay.start();
+//    }
+    
+    
     private void handleValueClick(int val) {
         if (selectedRow == -1) return;
 
-        gameState.makeMove(selectedRow, selectedCol, val, true);
+        // Check for deadlock BEFORE allowing move
+        if (gameState.checkForDeadlock(true)) {
+            statusLabel.setText("You have no legal moves! -5 lives, skipping turn");
+            selectedRow = -1;
+            selectedCol = -1;
+            valueSelectionPanel.setVisible(false);
+            gameState.setHumanTurn(false);
+            updateDisplay();
+            
+            Timer delay = new Timer(1500, e -> {
+                if (!checkGameEnd()) {
+                    updateHeatMap();
+                    animateHeatMap(0);
+                }
+            });
+            delay.setRepeats(false);
+            delay.start();
+            return;
+        }
+
+        // ⭐ CRITICAL FIX: Capture whether move was accepted
+        boolean moveAccepted = gameState.makeMove(selectedRow, selectedCol, val, true);
+        
+        // Clear selection
         selectedRow = -1;
         selectedCol = -1;
         valueSelectionPanel.setVisible(false);
-        gameState.setHumanTurn(false);
+        
+        // ⭐ ONLY switch turns if move was valid (not rejected)
+        if (moveAccepted) {
+            gameState.setHumanTurn(false);
+        }
+        
         updateDisplay();
 
         if (checkGameEnd()) return;
 
-        Timer delay = new Timer(600, e -> {
-            updateHeatMap();
-            animateHeatMap(0);
-        });
-        delay.setRepeats(false);
-        delay.start();
+        // ⭐ Only proceed to CPU turn if move was accepted
+        if (moveAccepted) {
+            Timer delay = new Timer(600, e -> {
+                updateHeatMap();
+                animateHeatMap(0);
+            });
+            delay.setRepeats(false);
+            delay.start();
+        }
     }
 
     // ============================================================================
@@ -392,6 +486,14 @@ public class TowersGameGUI extends JFrame {
     // ============================================================================
 
     private void doCPUMove() {
+    	
+    	
+        if (gameState.checkForDeadlock(false)) {
+            statusLabel.setText("CPU has no legal moves! -5 lives, skipping turn");
+            gameState.setHumanTurn(true);
+            updateDisplay();
+            return;
+        }
         int[] move = switch (currentStrategy) {
             case LIVES -> strategyLives.findBestMove();
             case COMPLETION -> strategyCompletion.findBestMove();
